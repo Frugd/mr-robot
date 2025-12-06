@@ -30,27 +30,9 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <!-- Firebase -->
     <script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
-
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyAaPpAVWhaiO35rFemklxTv-YnGNQ1u8Y4",
-    authDomain: "sitestore-86c1b.firebaseapp.com",
-    projectId: "sitestore-86c1b",
-    storageBucket: "sitestore-86c1b.firebasestorage.app",
-    messagingSenderId: "412619926190",
-    appId: "1:412619926190:web:b7499e7b923de5057e1b3f",
-    measurementId: "G-5D1NZS627H"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Глобальные переменные
         window.db = null;
