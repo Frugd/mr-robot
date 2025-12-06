@@ -1,1 +1,716 @@
 
+<!DOCTYPE html>
+<html lang="ru" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NovaStore - Каталог</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        indigo: {
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            900: '#312e81',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Глобальные переменные
+        window.db = null;
+        window.auth = null;
+        window.currentUser = null;
+        window.appId = typeof __app_id !== 'undefined' ? __app_id : 'nova-store-demo';
+
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        
+        if (Object.keys(firebaseConfig).length > 0) {
+            const app = initializeApp(firebaseConfig);
+            window.auth = getAuth(app);
+            window.db = getFirestore(app);
+
+            const initAuth = async () => {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(window.auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(window.auth);
+                    }
+                } catch (e) {
+                    console.error("Auth error:", e);
+                }
+            };
+
+            initAuth();
+
+            onAuthStateChanged(window.auth, (user) => {
+                if (user) {
+                    window.currentUser = user;
+                    loadUserProfile(user.uid);
+                    syncCartWithDB(user.uid);
+                    updateAuthUI(user);
+                } else {
+                    window.currentUser = null;
+                    updateAuthUI(null);
+                }
+            });
+        }
+
+        function loadUserProfile(uid) {
+            const userRef = doc(window.db, 'artifacts', window.appId, 'users', uid, 'profile', 'info');
+            onSnapshot(userRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.displayName) {
+                        updateAuthUI({ ...window.currentUser, displayName: data.displayName });
+                    }
+                }
+            });
+        }
+
+        function syncCartWithDB(uid) {
+            const cartRef = doc(window.db, 'artifacts', window.appId, 'users', uid, 'data', 'cart');
+            onSnapshot(cartRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const remoteCart = docSnap.data().items || [];
+                    window.cart = remoteCart;
+                    window.updateCartUI(false); 
+                }
+            });
+        }
+        
+        window.saveCartToDB = async (items) => {
+            if (!window.currentUser || !window.db) return;
+            try {
+                await setDoc(doc(window.db, 'artifacts', window.appId, 'users', window.currentUser.uid, 'data', 'cart'), {
+                    items: items,
+                    updatedAt: new Date().toISOString()
+                });
+            } catch (e) {
+                console.error("Error saving cart:", e);
+            }
+        };
+
+        window.saveUserProfile = async (name, email) => {
+            if (!window.currentUser || !window.db) return;
+            try {
+                await setDoc(doc(window.db, 'artifacts', window.appId, 'users', window.currentUser.uid, 'profile', 'info'), {
+                    displayName: name,
+                    email: email,
+                    registeredAt: new Date().toISOString()
+                });
+                updateAuthUI({ ...window.currentUser, displayName: name });
+                window.closeAuthModal();
+                window.showToast(`Добро пожаловать, ${name}!`, 'success');
+            } catch (e) {
+                console.error("Error saving profile:", e);
+                window.showToast("Ошибка сохранения профиля", "error");
+            }
+        }
+
+        function updateAuthUI(user) {
+            const authBtn = document.getElementById('auth-btn');
+            const userAvatar = document.getElementById('user-avatar-container');
+            const userNameDisplay = document.getElementById('user-name-display');
+
+            if (user && user.displayName) {
+                authBtn.classList.add('hidden');
+                userAvatar.classList.remove('hidden');
+                userNameDisplay.innerText = user.displayName.charAt(0).toUpperCase();
+            } else {
+                authBtn.classList.remove('hidden');
+                userAvatar.classList.add('hidden');
+            }
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Логика видимости модальных окон */
+        .modal-hidden {
+            visibility: hidden;
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .modal-visible {
+            visibility: visible;
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .hide-scroll::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scroll {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        @keyframes bump {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .bump-anim {
+            animation: bump 0.3s ease-out;
+        }
+        
+        .dark ::-webkit-scrollbar {
+            width: 8px;
+        }
+        .dark ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 transition-colors duration-300 dark:bg-gray-900 dark:text-gray-100">
+
+    <!-- Навигация -->
+    <nav class="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200 dark:bg-gray-900/80 dark:border-gray-800 transition-colors duration-300">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- Логотип -->
+                <div class="flex items-center gap-2 cursor-pointer" onclick="resetFilters()">
+                    <i class="ph-fill ph-storefront text-indigo-600 text-3xl"></i>
+                    <span class="font-bold text-xl tracking-tight text-gray-900 dark:text-white">Nova<span class="text-indigo-600">Store</span></span>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <!-- Переключатель темы -->
+                    <button onclick="toggleTheme()" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-300">
+                        <i id="theme-icon" class="ph-fill ph-moon text-xl"></i>
+                    </button>
+
+                    <!-- Профиль / Вход -->
+                    <button id="auth-btn" onclick="openAuthModal()" class="hidden sm:flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:text-indigo-600 dark:hover:text-indigo-400 transition">
+                        Войти
+                    </button>
+                    
+                    <div id="user-avatar-container" class="hidden flex items-center gap-2 group relative cursor-pointer">
+                        <div class="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold uppercase" id="user-name-display">
+                            U
+                        </div>
+                        <div class="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform origin-top-right z-50">
+                            <div class="p-3 border-b border-gray-100 dark:border-gray-700">
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Вы вошли как</p>
+                                <p class="text-sm font-bold text-gray-900 dark:text-white truncate">Покупатель</p>
+                            </div>
+                            <button onclick="logout()" class="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-b-xl flex items-center gap-2">
+                                <i class="ph ph-sign-out"></i> Выйти
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Кнопка корзины -->
+                    <button onclick="toggleCart()" class="relative p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition duration-200 group">
+                        <i class="ph ph-shopping-cart text-2xl text-gray-700 dark:text-gray-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"></i>
+                        <span id="cart-badge" class="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 transform translate-x-1/4 -translate-y-1/4 bg-red-600 rounded-full opacity-0 transition-opacity duration-200">0</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Главный баннер -->
+    <div class="relative bg-indigo-900 text-white overflow-hidden">
+        <div class="absolute inset-0 bg-indigo-800 opacity-50"></div>
+        <div class="relative max-w-7xl mx-auto px-4 py-16 sm:px-6 lg:px-8 flex flex-col items-center text-center">
+            <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-4">
+                Новая коллекция 2024
+            </h1>
+            <p class="text-lg md:text-xl text-indigo-200 mb-8 max-w-2xl">
+                Больше товаров, больше стиля. Выбирайте лучшее из обновленного каталога.
+            </p>
+            <button onclick="scrollToProducts()" class="bg-white text-indigo-900 px-8 py-3 rounded-full font-bold hover:bg-indigo-50 transition shadow-lg transform hover:-translate-y-1">
+                Смотреть новинки
+            </button>
+        </div>
+    </div>
+
+    <!-- Основной контент -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12" id="products-section">
+        
+        <!-- Фильтры -->
+        <div class="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Каталог товаров</h2>
+            <div class="flex overflow-x-auto pb-2 sm:pb-0 gap-2 w-full sm:w-auto hide-scroll" id="category-filters">
+                <!-- Категории рендерятся через JS -->
+            </div>
+        </div>
+
+        <!-- Сетка товаров -->
+        <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Товары рендерятся через JS -->
+        </div>
+
+        <!-- Пустое состояние -->
+        <div id="empty-state" class="hidden text-center py-20">
+            <i class="ph ph-magnifying-glass text-6xl text-gray-300 dark:text-gray-600 mb-4"></i>
+            <p class="text-xl text-gray-500 dark:text-gray-400">Товары не найдены</p>
+        </div>
+    </main>
+
+    <!-- Футер -->
+    <footer class="bg-gray-900 text-gray-400 py-8 border-t border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p>&copy; 2023 NovaStore. GitHub Edition.</p>
+        </div>
+    </footer>
+
+    <!-- Сайдбар корзины -->
+    <div id="cart-modal" class="fixed inset-0 z-50 modal-hidden transition-all duration-300">
+        <div class="absolute inset-0 bg-black bg-opacity-50" onclick="toggleCart()"></div>
+        <div id="cart-sidebar" class="absolute right-0 top-0 h-full w-full sm:w-96 bg-white dark:bg-gray-800 shadow-xl transform translate-x-full transition-transform duration-300 flex flex-col" onclick="event.stopPropagation()">
+            <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900">
+                <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <i class="ph-fill ph-shopping-bag text-indigo-600 dark:text-indigo-400"></i>
+                    Корзина
+                </h2>
+                <button onclick="toggleCart()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1">
+                    <i class="ph ph-x text-2xl"></i>
+                </button>
+            </div>
+            <div id="cart-items" class="flex-1 overflow-y-auto p-6 space-y-4 dark:text-gray-200">
+                <!-- Товары корзины -->
+            </div>
+            <div class="border-t border-gray-100 dark:border-gray-700 p-6 bg-gray-50 dark:bg-gray-900">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-gray-600 dark:text-gray-400">Итого:</span>
+                    <span id="cart-total" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">0 ₽</span>
+                </div>
+                <button onclick="checkout()" id="checkout-btn" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    Оформить заказ
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно авторизации -->
+    <div id="auth-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-hidden transition-all duration-300">
+        <div class="absolute inset-0 bg-black bg-opacity-60" onclick="closeAuthModal()"></div>
+        <div class="bg-white dark:bg-gray-800 rounded-2xl p-8 w-full max-w-md relative z-10 shadow-2xl transform scale-95 transition-transform duration-300" id="auth-content" onclick="event.stopPropagation()">
+            <button onclick="closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <i class="ph ph-x text-xl"></i>
+            </button>
+            <div class="text-center mb-6">
+                <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400 mb-3">
+                    <i class="ph-fill ph-user text-2xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Вход в аккаунт</h2>
+                <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Войдите, чтобы сохранить корзину</p>
+            </div>
+            <form onsubmit="handleAuth(event)" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ваше имя</label>
+                    <input type="text" id="auth-name" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition" placeholder="Иван">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+                    <input type="email" id="auth-email" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition" placeholder="ivan@example.com">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition shadow-lg mt-2">
+                    Войти / Зарегистрироваться
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Уведомление -->
+    <div id="toast" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-6 py-3 rounded-full shadow-lg transition-all duration-300 translate-y-20 opacity-0 z-50 flex items-center gap-2">
+        <i class="ph-fill ph-check-circle text-green-400 dark:text-green-600 text-xl"></i>
+        <span id="toast-message" class="font-medium">Товар добавлен</span>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // --- ОБНОВЛЕННЫЕ ДАННЫЕ (18 товаров) ---
+        const products = [
+            { id: 1, name: "Беспроводные наушники Pro", price: 12990, category: "electronics" },
+            { id: 2, name: "Умные часы Series 5", price: 24500, category: "electronics" },
+            { id: 3, name: "Рюкзак Urban Traveler", price: 4900, category: "accessories" },
+            { id: 4, name: "Фотоаппарат Retro Cam", price: 45000, category: "electronics" },
+            { id: 5, name: "Кроссовки Run Fast", price: 8900, category: "clothing" },
+            { id: 6, name: "Очки Sun Block", price: 3200, category: "accessories" },
+            { id: 7, name: "Худи Comfort", price: 5500, category: "clothing" },
+            { id: 8, name: "Колонка Bass Mini", price: 3990, category: "electronics" },
+            { id: 9, name: "Игровая мышь Viper", price: 4500, category: "electronics" },
+            { id: 10, name: "Механическая клавиатура", price: 7800, category: "electronics" },
+            { id: 11, name: "Джинсовая куртка", price: 6500, category: "clothing" },
+            { id: 12, name: "Кожаный кошелек", price: 2800, category: "accessories" },
+            { id: 13, name: "Кепка Baseball", price: 1500, category: "accessories" },
+            { id: 14, name: "Коврик для йоги", price: 1900, category: "accessories" },
+            { id: 15, name: "Планшет Pro Tab", price: 32000, category: "electronics" },
+            { id: 16, name: "Футболка Basic White", price: 1200, category: "clothing" },
+            { id: 17, name: "Шарф Winter Warm", price: 1800, category: "clothing" },
+            { id: 18, name: "Внешний аккумулятор 20k", price: 3500, category: "electronics" }
+        ];
+
+        const categories = [
+            { id: 'all', name: 'Все' },
+            { id: 'electronics', name: 'Электроника' },
+            { id: 'clothing', name: 'Одежда' },
+            { id: 'accessories', name: 'Аксессуары' }
+        ];
+
+        // Состояние
+        window.cart = [];
+        let currentCategory = 'all';
+
+        // Элементы DOM
+        const productGrid = document.getElementById('product-grid');
+        const filtersContainer = document.getElementById('category-filters');
+        const cartModal = document.getElementById('cart-modal');
+        const cartSidebar = document.getElementById('cart-sidebar');
+        const cartItemsContainer = document.getElementById('cart-items');
+        const cartTotalElement = document.getElementById('cart-total');
+        const cartBadge = document.getElementById('cart-badge');
+        const emptyState = document.getElementById('empty-state');
+        const authModal = document.getElementById('auth-modal');
+        const authContent = document.getElementById('auth-content');
+
+        // Инициализация
+        function init() {
+            renderFilters();
+            renderProducts();
+            initTheme();
+            const localCart = localStorage.getItem('novaCart');
+            if(localCart) {
+                window.cart = JSON.parse(localCart);
+                window.updateCartUI(false);
+            }
+        }
+
+        function initTheme() {
+            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+                updateThemeIcon(true);
+            } else {
+                document.documentElement.classList.remove('dark');
+                updateThemeIcon(false);
+            }
+        }
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark');
+            localStorage.theme = isDark ? 'dark' : 'light';
+            updateThemeIcon(isDark);
+        }
+
+        function updateThemeIcon(isDark) {
+            const icon = document.getElementById('theme-icon');
+            icon.className = isDark ? 'ph-fill ph-sun text-xl' : 'ph-fill ph-moon text-xl';
+        }
+
+        // --- ЛОГИКА РАНДОМНЫХ КАРТИНОК ---
+        function getRandomImageSrc() {
+            // Генерирует случайное число от 1 до 10
+            // Предполагается, что в папке img лежат файлы 1.jpg, 2.jpg ... 10.jpg
+            const id = Math.floor(Math.random() * 10) + 1;
+            return `img/${id}.jpg`;
+        }
+
+        function renderFilters() {
+            filtersContainer.innerHTML = categories.map(cat => `
+                <button 
+                    onclick="setCategory('${cat.id}')"
+                    class="px-4 py-2 rounded-full text-sm font-medium transition whitespace-nowrap ${
+                        currentCategory === cat.id 
+                        ? 'bg-indigo-600 text-white shadow-md' 
+                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
+                    }"
+                >
+                    ${cat.name}
+                </button>
+            `).join('');
+        }
+
+        function setCategory(id) {
+            currentCategory = id;
+            renderFilters();
+            renderProducts();
+        }
+
+        function resetFilters() {
+            setCategory('all');
+            scrollToProducts();
+        }
+
+        function scrollToProducts() {
+            document.getElementById('products-section').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // --- РЕНДЕР ТОВАРОВ (с рандомными картинками) ---
+        function renderProducts() {
+            const filtered = currentCategory === 'all' 
+                ? products 
+                : products.filter(p => p.category === currentCategory);
+
+            if (filtered.length === 0) {
+                productGrid.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            productGrid.innerHTML = filtered.map(product => `
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm hover:shadow-xl transition-shadow duration-300 overflow-hidden group border border-gray-100 dark:border-gray-700 flex flex-col">
+                    <div class="relative h-64 overflow-hidden bg-gray-200 dark:bg-gray-700">
+                        
+                        <!-- Картинка с Fallback логикой -->
+                        <!-- Если картинка не найдена (нет папки img), сработает onerror и покажется заглушка -->
+                        <img 
+                            src="${getRandomImageSrc()}" 
+                            alt="${product.name}"
+                            class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                            onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');"
+                        >
+                        
+                        <!-- Заглушка (показывается, если img не загрузился) -->
+                        <div class="hidden absolute inset-0 w-full h-full flex items-center justify-center text-gray-400 dark:text-gray-500 bg-gray-200 dark:bg-gray-700">
+                            <i class="ph ph-image text-4xl"></i>
+                        </div>
+
+                        <div class="absolute top-3 right-3 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide z-10">
+                            ${getCategoryName(product.category)}
+                        </div>
+                    </div>
+                    <div class="p-5 flex-1 flex flex-col">
+                        <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-1 leading-snug">${product.name}</h3>
+                        <p class="text-indigo-600 dark:text-indigo-400 font-bold text-xl mb-4">${product.price.toLocaleString()} ₽</p>
+                        <button onclick="addToCart(${product.id})" class="mt-auto w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 py-2.5 rounded-lg hover:bg-indigo-600 dark:hover:bg-indigo-200 transition font-medium flex items-center justify-center gap-2 active:scale-95">
+                            <i class="ph ph-plus"></i> В корзину
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function getCategoryName(id) {
+            const cat = categories.find(c => c.id === id);
+            return cat ? cat.name : id;
+        }
+
+        function toggleCart() {
+            const isHidden = cartModal.classList.contains('modal-hidden');
+            if (isHidden) {
+                cartModal.classList.remove('modal-hidden');
+                cartModal.classList.add('modal-visible');
+                requestAnimationFrame(() => {
+                   cartSidebar.classList.remove('translate-x-full');
+                });
+            } else {
+                cartSidebar.classList.add('translate-x-full');
+                setTimeout(() => {
+                    cartModal.classList.remove('modal-visible');
+                    cartModal.classList.add('modal-hidden');
+                }, 300);
+            }
+        }
+
+        function addToCart(productId) {
+            const product = products.find(p => p.id === productId);
+            const existingItem = window.cart.find(item => item.id === productId);
+
+            if (existingItem) {
+                existingItem.qty++;
+            } else {
+                window.cart.push({ ...product, qty: 1 });
+            }
+
+            window.updateCartUI(true);
+            cartBadge.classList.add('bump-anim');
+            setTimeout(() => cartBadge.classList.remove('bump-anim'), 300);
+            showToast(`"${product.name}" в корзине`);
+            
+            if(cartModal.classList.contains('modal-hidden')) {
+                toggleCart();
+            }
+        }
+
+        function removeFromCart(productId) {
+            window.cart = window.cart.filter(item => item.id !== productId);
+            window.updateCartUI(true);
+        }
+
+        function changeQty(productId, delta) {
+            const item = window.cart.find(i => i.id === productId);
+            if (item) {
+                item.qty += delta;
+                if (item.qty <= 0) {
+                    removeFromCart(productId);
+                } else {
+                    window.updateCartUI(true);
+                }
+            }
+        }
+
+        window.updateCartUI = function(shouldSave = true) {
+            const totalQty = window.cart.reduce((sum, item) => sum + item.qty, 0);
+            cartBadge.innerText = totalQty;
+            
+            if (totalQty > 0) {
+                cartBadge.classList.remove('opacity-0');
+            } else {
+                cartBadge.classList.add('opacity-0');
+            }
+
+            if (window.cart.length === 0) {
+                cartItemsContainer.innerHTML = `
+                    <div class="flex flex-col items-center justify-center h-full text-center text-gray-500 mt-20">
+                        <div class="bg-gray-100 dark:bg-gray-700 p-4 rounded-full mb-4">
+                            <i class="ph ph-shopping-cart text-4xl text-gray-400 dark:text-gray-500"></i>
+                        </div>
+                        <p class="font-medium text-lg text-gray-900 dark:text-white">Корзина пуста</p>
+                        <p class="text-sm mt-1 dark:text-gray-400">Добавьте что-нибудь стильное</p>
+                        <button onclick="toggleCart()" class="mt-6 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-6 py-2 rounded-lg font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition">В каталог</button>
+                    </div>
+                `;
+                document.getElementById('checkout-btn').disabled = true;
+                cartTotalElement.innerText = "0 ₽";
+            } else {
+                document.getElementById('checkout-btn').disabled = false;
+                cartItemsContainer.innerHTML = window.cart.map(item => `
+                    <div class="flex gap-4 p-3 bg-white dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-xl hover:shadow-sm transition">
+                        <div class="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-600 relative">
+                             <!-- В корзине тоже используем логику fallback, но без рандома (или можно добавить рандом, если нужно) -->
+                             <!-- Здесь просто заглушка для корзины, так как мы не знаем какой рандом был у товара при добавлении -->
+                             <!-- Для простоты в корзине оставим красивую иконку -->
+                            <div class="h-full w-full flex items-center justify-center text-gray-400 dark:text-gray-500 rounded-lg">
+                                <i class="ph ph-shopping-bag text-2xl"></i>
+                            </div>
+                        </div>
+                        <div class="flex flex-1 flex-col justify-between">
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-900 dark:text-white line-clamp-1">${item.name}</h3>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${getCategoryName(item.category)}</p>
+                            </div>
+                            <div class="flex items-center justify-between mt-2">
+                                <div class="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 rounded-lg px-2 py-1">
+                                    <button onclick="event.stopPropagation(); changeQty(${item.id}, -1)" class="text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300 w-5 h-5 flex items-center justify-center transition">-</button>
+                                    <span class="text-sm font-medium text-gray-900 dark:text-white w-4 text-center">${item.qty}</span>
+                                    <button onclick="event.stopPropagation(); changeQty(${item.id}, 1)" class="text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300 w-5 h-5 flex items-center justify-center transition">+</button>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-sm font-bold text-indigo-600 dark:text-indigo-400">${(item.price * item.qty).toLocaleString()} ₽</p>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="event.stopPropagation(); removeFromCart(${item.id})" class="text-gray-300 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 self-start p-1 transition">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                `).join('');
+
+                const total = window.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+                cartTotalElement.innerText = total.toLocaleString() + " ₽";
+            }
+
+            if (shouldSave) {
+                saveCartLocally();
+                if (window.saveCartToDB) {
+                    window.saveCartToDB(window.cart);
+                }
+            }
+        }
+
+        function saveCartLocally() {
+            localStorage.setItem('novaCart', JSON.stringify(window.cart));
+        }
+
+        function checkout() {
+            if (window.cart.length === 0) return;
+            if (!window.currentUser || !window.currentUser.displayName) {
+                showToast("Войдите для оформления заказа", "normal");
+                toggleCart();
+                setTimeout(openAuthModal, 300);
+                return;
+            }
+            const total = window.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+            if(confirm(`Подтвердите заказ на сумму ${total.toLocaleString()} ₽`)) {
+                window.cart = [];
+                window.updateCartUI(true);
+                toggleCart();
+                showToast("Заказ успешно оформлен!", "success");
+            }
+        }
+
+        function showToast(message, type = 'normal') {
+            const toast = document.getElementById('toast');
+            const msgEl = document.getElementById('toast-message');
+            const icon = toast.querySelector('i');
+            msgEl.innerText = message;
+            if (type === 'success') {
+                icon.className = 'ph-fill ph-check-circle text-green-400 dark:text-green-600 text-xl';
+            } else if (type === 'error') {
+                 icon.className = 'ph-fill ph-warning-circle text-red-400 dark:text-red-600 text-xl';
+            } else {
+                icon.className = 'ph-fill ph-shopping-bag text-indigo-400 dark:text-indigo-300 text-xl';
+            }
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function openAuthModal() {
+            authModal.classList.remove('modal-hidden');
+            authModal.classList.add('modal-visible');
+            authContent.classList.remove('scale-95');
+            authContent.classList.add('scale-100');
+        }
+
+        function closeAuthModal() {
+            authModal.classList.remove('modal-visible');
+            authModal.classList.add('modal-hidden');
+            authContent.classList.add('scale-95');
+            authContent.classList.remove('scale-100');
+        }
+
+        function handleAuth(e) {
+            e.preventDefault();
+            const name = document.getElementById('auth-name').value;
+            const email = document.getElementById('auth-email').value;
+            if (window.saveUserProfile) {
+                window.saveUserProfile(name, email);
+            }
+        }
+
+        function logout() {
+            if(confirm("Вы действительно хотите выйти?")) {
+               location.reload(); 
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
+
+
