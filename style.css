@@ -1,0 +1,27 @@
+body { font-family: 'Inter', sans-serif; }
+
+.modal-hidden {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+.modal-visible {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.hide-scroll::-webkit-scrollbar { display: none; }
+.hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+@keyframes bump {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+.bump-anim { animation: bump 0.3s ease-out; }
+
+.dark ::-webkit-scrollbar { width: 8px; }
+.dark ::-webkit-scrollbar-track { background: #1f2937; }
+.dark ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
