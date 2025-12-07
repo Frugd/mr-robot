@@ -30,9 +30,7 @@
     
     <!-- Firebase SDKs -->
     <script type="module">
-        // Используем совместимые версии SDK для работы через CDN
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
         import { 
             getAuth, 
             createUserWithEmailAndPassword, 
@@ -63,14 +61,12 @@
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
-        const analytics = getAnalytics(app);
         
-        // Экспорт в глобальную область видимости
+        // Экспорт
         window.auth = getAuth(app);
         window.db = getFirestore(app);
         window.currentUser = null;
 
-        // Отслеживание состояния входа
         onAuthStateChanged(window.auth, (user) => {
             if (user) {
                 window.currentUser = user;
@@ -79,24 +75,19 @@
             } else {
                 window.currentUser = null;
                 updateAuthUI(null);
-                // При выходе очищаем корзину, если нужно, или оставляем локальную
             }
         });
 
-        // Синхронизация корзины (загрузка)
         function syncCartWithDB(uid) {
             const cartRef = doc(window.db, 'users', uid, 'data', 'cart');
             onSnapshot(cartRef, (docSnap) => {
                 if (docSnap.exists()) {
-                    const remoteCart = docSnap.data().items || [];
-                    // Простая стратегия: если в БД есть данные, берем их
-                    window.cart = remoteCart;
+                    window.cart = docSnap.data().items || [];
                     window.updateCartUI(false); 
                 }
             });
         }
         
-        // Сохранение корзины
         window.saveCartToDB = async (items) => {
             if (!window.currentUser || !window.db) return;
             try {
@@ -109,14 +100,15 @@
             }
         };
 
-        // Функции входа/регистрации
+        // УЛУЧШЕННАЯ ФУНКЦИЯ РЕГИСТРАЦИИ С ВЫВОДОМ ОШИБОК
         window.registerUser = async (email, password, name) => {
             try {
                 const userCredential = await createUserWithEmailAndPassword(window.auth, email, password);
                 const user = userCredential.user;
+                
                 await updateProfile(user, { displayName: name });
                 
-                // Создаем запись пользователя в БД
+                // Пробуем записать в БД
                 await setDoc(doc(window.db, 'users', user.uid), {
                     name: name,
                     email: email,
@@ -127,10 +119,14 @@
                 window.showToast(`Добро пожаловать, ${name}!`, 'success');
                 updateAuthUI({ ...user, displayName: name });
             } catch (error) {
-                console.error(error);
-                let msg = "Ошибка регистрации";
-                if (error.code === 'auth/email-already-in-use') msg = "Email уже занят";
-                if (error.code === 'auth/weak-password') msg = "Пароль слишком простой (мин. 6 символов)";
+                console.error("Registration Error:", error);
+                
+                let msg = `Ошибка: ${error.code}`;
+                if (error.code === 'auth/email-already-in-use') msg = "Этот Email уже занят";
+                if (error.code === 'auth/weak-password') msg = "Пароль слишком простой (минимум 6 символов)";
+                if (error.code === 'auth/operation-not-allowed') msg = "Вход по Email/Password отключен в Firebase Console!";
+                if (error.code === 'permission-denied') msg = "Нет прав на запись в БД (проверьте Rules)";
+                
                 alert(msg);
             }
         }
@@ -141,9 +137,11 @@
                 window.closeAuthModal();
                 window.showToast("Вы успешно вошли!", "success");
             } catch (error) {
-                console.error(error);
+                console.error("Login Error:", error);
                 let msg = "Ошибка входа";
-                if (error.code === 'auth/invalid-credential') msg = "Неверный email или пароль";
+                if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                    msg = "Неверный email или пароль";
+                }
                 alert(msg);
             }
         }
@@ -155,14 +153,16 @@
             }
         }
         
-        // Функция отправки заказа
         window.submitOrderToDB = async (orderData) => {
             try {
                 await addDoc(collection(window.db, 'orders'), orderData);
                 return true;
             } catch (e) {
-                console.error("Error creating order:", e);
-                alert("Ошибка при создании заказа: " + e.message);
+                console.error("Order Error:", e);
+                let msg = "Ошибка создания заказа. ";
+                if(e.code === 'permission-denied') msg += "Проверьте правила БД (Firestore Rules).";
+                else msg += e.message;
+                alert(msg);
                 return false;
             }
         }
@@ -220,7 +220,6 @@
     <nav class="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200 dark:bg-gray-900/80 dark:border-gray-800 transition-colors duration-300">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
-                <!-- Логотип -->
                 <div class="flex items-center gap-2 cursor-pointer" onclick="resetFilters()">
                     <i class="ph-fill ph-storefront text-indigo-600 text-3xl"></i>
                     <span class="font-bold text-xl tracking-tight text-gray-900 dark:text-white">Nova<span class="text-indigo-600">Store</span></span>
@@ -342,6 +341,15 @@
         <span id="toast-message" class="font-medium">Уведомление</span>
     </div>
 
+    <!-- ФУТЕР (ПОДВАЛ) -->
+    <footer class="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center">
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                © 2023 NovaStore. Все права защищены.
+            </p>
+        </div>
+    </footer>
+
     <script>
         // --- ДАННЫЕ ТОВАРОВ (18 шт) ---
         const products = [
@@ -373,32 +381,21 @@
         ];
 
         // --- ЛОГИКА УНИКАЛЬНЫХ ИЗОБРАЖЕНИЙ ---
-        // Пул из 30 картинок (номера 1-30)
         const imagePool = Array.from({length: 30}, (_, i) => i + 1);
-        
-        // Перемешиваем пул (Fisher-Yates Shuffle)
         for (let i = imagePool.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [imagePool[i], imagePool[j]] = [imagePool[j], imagePool[i]];
         }
-
-        // Присваиваем каждому товару уникальный номер из перемешанного пула
         products.forEach((product, index) => {
             product.imageId = imagePool[index];
         });
 
-        // Функция-обработчик ошибок загрузки изображений (пробует разные форматы)
         window.handleImageError = function(img, id) {
             const currentSrc = img.src;
-            // Порядок перебора: jpg -> png -> webp -> gif -> заглушка
-            if (currentSrc.endsWith('.jpg')) {
-                img.src = `img/${id}.png`;
-            } else if (currentSrc.endsWith('.png')) {
-                img.src = `img/${id}.webp`;
-            } else if (currentSrc.endsWith('.webp')) {
-                img.src = `img/${id}.gif`;
-            } else {
-                // Если ничего не подошло, скрываем img и показываем заглушку
+            if (currentSrc.endsWith('.jpg')) img.src = `img/${id}.png`;
+            else if (currentSrc.endsWith('.png')) img.src = `img/${id}.webp`;
+            else if (currentSrc.endsWith('.webp')) img.src = `img/${id}.gif`;
+            else {
                 img.style.display = 'none';
                 img.nextElementSibling.classList.remove('hidden');
             }
@@ -409,7 +406,6 @@
         let currentCategory = 'all';
         let isLoginMode = true;
 
-        // Элементы
         const productGrid = document.getElementById('product-grid');
         const filtersContainer = document.getElementById('category-filters');
         const cartModal = document.getElementById('cart-modal');
@@ -486,7 +482,6 @@
             productGrid.innerHTML = filtered.map(product => `
                 <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm hover:shadow-xl transition-shadow duration-300 overflow-hidden group border border-gray-100 dark:border-gray-700 flex flex-col">
                     <div class="relative h-64 overflow-hidden bg-gray-200 dark:bg-gray-700">
-                        <!-- Начинаем с JPG. Если ошибка -> вызываем handleImageError -->
                         <img 
                             src="img/${product.imageId}.jpg" 
                             alt="${product.name}"
@@ -606,11 +601,8 @@
             }
         }
 
-        // --- ЛОГИКА ЗАКАЗА ---
         async function checkout() {
             if (window.cart.length === 0) return;
-            
-            // Проверка авторизации
             if (!window.currentUser) {
                 showToast("Пожалуйста, войдите в аккаунт", "normal");
                 toggleCart();
@@ -621,7 +613,6 @@
             const total = window.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
             
             if(confirm(`Оформить заказ на сумму ${total.toLocaleString()} ₽?`)) {
-                // Формирование данных заказа
                 const orderData = {
                     userId: window.currentUser.uid,
                     userName: window.currentUser.displayName || "Без имени",
@@ -638,7 +629,6 @@
                     createdAt: new Date().toISOString()
                 };
 
-                // Отправка в БД
                 const success = await window.submitOrderToDB(orderData);
 
                 if (success) {
@@ -655,15 +645,12 @@
             const msgEl = document.getElementById('toast-message');
             const icon = toast.querySelector('i');
             msgEl.innerText = message;
-            
             if (type === 'success') icon.className = 'ph-fill ph-check-circle text-green-400 dark:text-green-600 text-xl';
             else icon.className = 'ph-fill ph-info text-indigo-400 dark:text-indigo-300 text-xl';
-
             toast.classList.remove('translate-y-20', 'opacity-0');
             setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
         }
 
-        // --- AUTH UI ---
         function openAuthModal() {
             authModal.classList.remove('modal-hidden');
             authModal.classList.add('modal-visible');
