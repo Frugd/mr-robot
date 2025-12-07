@@ -153,31 +153,31 @@ function updateAuthUI(user) {
 
 // --- ДАННЫЕ ТОВАРОВ (18 шт) ---
 const products = [
-    { id: 1, name: "Беспроводные наушники Pro", price: 12990, category: "electronics" },
-    { id: 2, name: "Умные часы Series 5", price: 24500, category: "electronics" },
-    { id: 3, name: "Рюкзак Urban Traveler", price: 4900, category: "accessories" },
-    { id: 4, name: "Фотоаппарат Retro Cam", price: 45000, category: "electronics" },
-    { id: 5, name: "Кроссовки Run Fast", price: 8900, category: "clothing" },
-    { id: 6, name: "Очки Sun Block", price: 3200, category: "accessories" },
-    { id: 7, name: "Худи Comfort", price: 5500, category: "clothing" },
-    { id: 8, name: "Колонка Bass Mini", price: 3990, category: "electronics" },
-    { id: 9, name: "Игровая мышь Viper", price: 4500, category: "electronics" },
-    { id: 10, name: "Механическая клавиатура", price: 7800, category: "electronics" },
-    { id: 11, name: "Джинсовая куртка", price: 6500, category: "clothing" },
-    { id: 12, name: "Кошелек Leather", price: 2800, category: "accessories" },
-    { id: 13, name: "Кепка Baseball", price: 1500, category: "accessories" },
-    { id: 14, name: "Коврик для йоги", price: 1900, category: "accessories" },
-    { id: 15, name: "Планшет Pro Tab", price: 32000, category: "electronics" },
-    { id: 16, name: "Футболка Basic White", price: 1200, category: "clothing" },
-    { id: 17, name: "Шарф Winter Warm", price: 1800, category: "clothing" },
-    { id: 18, name: "Power Bank 20k", price: 3500, category: "electronics" }
+    { id: 1, name: "DDoS", price: 12990, category: "electronics" },
+    { id: 2, name: "Создать личность/карту/номер", price: 24500, category: "electronics" },
+    { id: 3, name: "Поиск по бд", price: 4900, category: "accessories" },
+    { id: 4, name: "sms activate", price: 45000, category: "electronics" },
+    { id: 5, name: "web-crawler", price: 8900, category: "clothing" },
+    { id: 6, name: "Снос", price: 3200, category: "accessories" },
+    { id: 7, name: "Удаление из бд", price: 5500, category: "clothing" },
+    { id: 8, name: "VPN 1г любой протокол", price: 3990, category: "electronics" },
+    { id: 9, name: "WHOIS-запрос", price: 4500, category: "electronics" },
+    { id: 10, name: "Людское", price: 1, category: "electronics" },
+    { id: 11, name: "Фишинг", price: 6500, category: "clothing" },
+    { id: 12, name: "HLR-запрос", price: 2800, category: "accessories" },
+    { id: 13, name: "Сват", price: 1500, category: "accessories" },
+    { id: 14, name: "Пробив", price: 1900, category: "accessories" },
+    { id: 15, name: "OSINT", price: 32000, category: "electronics" },
+    { id: 16, name: "Деанон", price: 1200, category: "clothing" },
+    { id: 17, name: "Докс", price: 1800, category: "clothing" },
+    { id: 18, name: "Слежка", price: 3500, category: "electronics" }
 ];
 
 const categories = [
     { id: 'all', name: 'Все' },
-    { id: 'electronics', name: 'Электроника' },
-    { id: 'clothing', name: 'Одежда' },
-    { id: 'accessories', name: 'Аксессуары' }
+    { id: 'electronics', name: 'Чёта' },
+    { id: 'clothing', name: 'Чёта ещё' },
+    { id: 'accessories', name: 'И ёщё чёт' }
 ];
 
 // --- ЛОГИКА УНИКАЛЬНЫХ ИЗОБРАЖЕНИЙ ---
